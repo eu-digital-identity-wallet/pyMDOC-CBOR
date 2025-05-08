@@ -36,7 +36,6 @@ class MdocCborIssuer:
         user_pin: str = None,
         lib_path: str = None,
         slot_id: int = None,
-        hsm: bool = False,
         alg: str = None,
         kid: str = None,
         private_key: Union[dict, CoseKey] = {},
@@ -51,7 +50,6 @@ class MdocCborIssuer:
         self.user_pin = user_pin
         self.lib_path = lib_path
         self.slot_id = slot_id
-        self.hsm = hsm
         self.alg = alg
         self.kid = kid
 
@@ -107,36 +105,19 @@ class MdocCborIssuer:
         else:
             devicekeyinfo: CoseKey = devicekeyinfo
 
-        if self.hsm:
-            msoi = MsoIssuer(
-                data=data,
-                cert_path=cert_path,
-                hsm=self.hsm,
-                key_label=self.key_label,
-                user_pin=self.user_pin,
-                lib_path=self.lib_path,
-                slot_id=self.slot_id,
-                alg=self.alg,
-                kid=self.kid,
-                validity=validity,
-                revocation=revocation,
-            )
-
-        else:
-            msoi = MsoIssuer(
-                data=data,
-                private_key=self.private_key,
-                alg=self.alg,
-                cert_path=cert_path,
-                validity=validity,
-                revocation=revocation,
-            )
+        msoi = MsoIssuer(
+            data=data,
+            private_key=self.private_key,
+            alg=self.alg,
+            cert_path=cert_path,
+            validity=validity,
+            revocation=revocation,
+        )
 
         mso = msoi.sign(doctype=doctype, device_key=devicekeyinfo)
 
         mso_cbor = mso.encode(
             tag=False,
-            hsm=self.hsm,
             key_label=self.key_label,
             user_pin=self.user_pin,
             lib_path=self.lib_path,
