@@ -52,19 +52,18 @@ class MsoIssuer(MsoX509Fabric):
         slot_id: int = None,
         kid: str = None,
         alg: str = None,
-        hsm: bool = False,
         private_key: Union[dict, CoseKey] = None,
         digest_alg: str = settings.PYMDOC_HASHALG,
     ):
-        if not hsm:
-            if private_key and isinstance(private_key, dict):
-                self.private_key = CoseKey.from_dict(private_key)
-                if not self.private_key.kid:
-                    self.private_key.kid = str(uuid.uuid4())
-            elif private_key and isinstance(private_key, CoseKey):
-                self.private_key = private_key
-            else:
-                raise MsoPrivateKeyRequired("MSO Writer requires a valid private key")
+
+        if private_key and isinstance(private_key, dict):
+            self.private_key = CoseKey.from_dict(private_key)
+            if not self.private_key.kid:
+                self.private_key.kid = str(uuid.uuid4())
+        elif private_key and isinstance(private_key, CoseKey):
+            self.private_key = private_key
+        else:
+            raise MsoPrivateKeyRequired("MSO Writer requires a valid private key")
 
         self.data: dict = data
         self.hash_map: dict = {}
@@ -75,7 +74,6 @@ class MsoIssuer(MsoX509Fabric):
         self.user_pin = user_pin
         self.lib_path = lib_path
         self.slot_id = slot_id
-        self.hsm = hsm
         self.alg = alg
         self.kid = kid
         self.validity = validity
@@ -189,43 +187,24 @@ class MsoIssuer(MsoX509Fabric):
         else:
             _cert = self.selfsigned_x509cert()
 
-        if self.hsm:
-            # print("payload diganostic notation: \n",cbor2diag(cbor2.dumps(cbor2.CBORTag(24, cbor2.dumps(payload)))))
+        # print("payload diganostic notation: \n", cbor2diag(cbor2.dumps(cbor2.CBORTag(24,cbor2.dumps(payload)))))
 
-            mso = Sign1Message(
-                phdr={
-                    Algorithm: self.alg,
-                    # 33: _cert
-                },
-                # TODO: x509 (cbor2.CBORTag(33)) and federation trust_chain support (cbor2.CBORTag(27?)) here
-                # 33 means x509chain standing to rfc9360
-                # in both protected and unprotected for interop purpose .. for now.
-                uhdr={33: _cert},
-                payload=cbor2.dumps(
-                    cbor2.CBORTag(24, cbor2.dumps(payload, canonical=True)),
-                    canonical=True,
-                ),
-            )
+        mso = Sign1Message(
+            phdr={
+                Algorithm: self.private_key.alg,
+                # KID: self.private_key.kid,
+                # 33: _cert
+            },
+            # TODO: x509 (cbor2.CBORTag(33)) and federation trust_chain support (cbor2.CBORTag(27?)) here
+            # 33 means x509chain standing to rfc9360
+            # in both protected and unprotected for interop purpose .. for now.
+            uhdr={33: _cert},
+            payload=cbor2.dumps(
+                cbor2.CBORTag(24, cbor2.dumps(payload, canonical=True)),
+                canonical=True,
+            ),
+        )
 
-        else:
-            # print("payload diganostic notation: \n", cbor2diag(cbor2.dumps(cbor2.CBORTag(24,cbor2.dumps(payload)))))
-
-            mso = Sign1Message(
-                phdr={
-                    Algorithm: self.private_key.alg,
-                    # KID: self.private_key.kid,
-                    # 33: _cert
-                },
-                # TODO: x509 (cbor2.CBORTag(33)) and federation trust_chain support (cbor2.CBORTag(27?)) here
-                # 33 means x509chain standing to rfc9360
-                # in both protected and unprotected for interop purpose .. for now.
-                uhdr={33: _cert},
-                payload=cbor2.dumps(
-                    cbor2.CBORTag(24, cbor2.dumps(payload, canonical=True)),
-                    canonical=True,
-                ),
-            )
-
-            mso.key = self.private_key
+        mso.key = self.private_key
 
         return mso

@@ -39,35 +39,6 @@ pip install git+https://github.com/devisefutures/pyMDOC-CBOR.git@cert_arg
 
 ## Usage
 
-### Issue an MDOC CBOR signed with HSM key
-
-````
-PID_DATA = {
-        "eu.europa.ec.eudiw.pid.1": {
-            "family_name": "Raffaello",
-            "given_name": "Mascetti",
-            "birth_date": "1922-03-13"
-        }
-    }
-
-mdoci = MdocCborIssuer(
-    alg = 'ES256',
-    kid = "demo-kid",
-    hsm=True,
-    key_label="p256-1",
-    user_pin="1234",
-    lib_path="/etc/utimaco/libcs2_pkcs11.so",
-    slot_id=3
-)
-
-mdoc = mdoci.new(
-    doctype="eu.europa.ec.eudiw.pid.1",
-    data=PID_DATA,
-    cert_path="app/keys/IACAmDLRoot01.der" # DS certificate 
-)
-
-````
-
 ### Issue an MDOC CBOR
 
 `MdocCborIssuer` must be initialized with a private key.
