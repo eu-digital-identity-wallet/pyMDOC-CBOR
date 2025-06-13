@@ -44,4 +44,5 @@ CBORTAGS_ATTR_MAP = {
     "expiry_date": 1004,
     "issue_date": 1004,
     "issuance_date": 1004,
+    "effective_from_date": 0,
 }
