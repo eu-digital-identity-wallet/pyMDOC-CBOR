@@ -92,7 +92,7 @@ class MsoIssuer(MsoX509Fabric):
 
                 _value_cbortag = settings.CBORTAGS_ATTR_MAP.get(k, None)
 
-                if _value_cbortag:
+                if _value_cbortag is not None:
                     v = cbor2.CBORTag(_value_cbortag, value=v)
                     # print("\n-----\n K,V ", k, "\n", v)
 
