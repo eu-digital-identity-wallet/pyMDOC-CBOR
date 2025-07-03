@@ -101,9 +101,6 @@ class MdocCborIssuer:
             x = public_key.public_numbers().x.to_bytes(expected_byte_length, "big")
             y = public_key.public_numbers().y.to_bytes(expected_byte_length, "big")
 
-            print(f"X coordinate length: {len(x)} bytes")
-            print(f"Y coordinate length: {len(y)} bytes")
-
             devicekeyinfo = {
                 1: 2,
                 -1: curve_identifier,
