@@ -80,20 +80,29 @@ class MdocCborIssuer:
                 "brainpoolP512r1": 10,  # Brainpool P-512
                 # Add more curve mappings as needed
             }
+
+            # Define the expected byte lengths for each curve
+            curve_byte_lengths = {
+                "secp256r1": 32,  # 256 bits / 8 = 32 bytes
+                "secp384r1": 48,  # 384 bits / 8 = 48 bytes
+                "secp521r1": 66,  # 521 bits / 8 = 65.125, rounded up to 66 bytes
+                "brainpoolP256r1": 32,  # 256 bits / 8 = 32 bytes
+                "brainpoolP384r1": 48,  # 384 bits / 8 = 48 bytes
+                "brainpoolP512r1": 64,  # 512 bits / 8 = 64 bytes
+            }
+
             curve_identifier = curve_map.get(curve_name)
 
-            # Extract the x and y coordinates from the public key
-            x = public_key.public_numbers().x.to_bytes(
-                (public_key.public_numbers().x.bit_length() + 7)
-                // 8,  # Number of bytes needed
-                "big",  # Byte order
-            )
+            expected_byte_length = curve_byte_lengths.get(curve_name)
 
-            y = public_key.public_numbers().y.to_bytes(
-                (public_key.public_numbers().y.bit_length() + 7)
-                // 8,  # Number of bytes needed
-                "big",  # Byte order
-            )
+            if expected_byte_length is None:
+                raise ValueError(f"Unsupported curve: {curve_name}")
+
+            x = public_key.public_numbers().x.to_bytes(expected_byte_length, "big")
+            y = public_key.public_numbers().y.to_bytes(expected_byte_length, "big")
+
+            print(f"X coordinate length: {len(x)} bytes")
+            print(f"Y coordinate length: {len(y)} bytes")
 
             devicekeyinfo = {
                 1: 2,
