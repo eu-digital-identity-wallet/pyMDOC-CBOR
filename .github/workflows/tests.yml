@@ -1,0 +1,40 @@
+# Unit tests (pytest with coverage, Python 3.12 and 3.13), flake8 syntax-error check and
+# Bandit scan (tests excluded).
+# Runs on every push and pull request (all branches) and on manual dispatch. Needs secrets: none.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - '3.12'
+          - '3.13'
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Lint with flake8 (syntax errors and undefined names only)
+        run: flake8 pymdoccbor --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Test with pytest
+        run: pytest --cov=pymdoccbor pymdoccbor/tests
+      - name: Bandit Security Scan
+        run: bandit -r pymdoccbor -x pymdoccbor/tests

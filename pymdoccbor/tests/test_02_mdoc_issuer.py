@@ -1,5 +1,4 @@
 import cbor2
-import os
 
 from pycose.messages import Sign1Message
 
@@ -7,49 +6,41 @@ from pymdoccbor.mdoc.issuer import MdocCborIssuer
 from pymdoccbor.mdoc.verifier import MdocCbor
 from pymdoccbor.mso.issuer import MsoIssuer
 from . pid_data import PID_DATA
+from .conftest import cose_private_key, pem_device_key
 
 
-PKEY = {
-    'KTY': 'EC2',
-    'CURVE': 'P_256',
-    'ALG': 'ES256',
-    'D': os.urandom(32),
-    'KID': b"demo-kid"
-}
-
-
-def test_mso_writer():
+def test_mso_writer(pki, validity, tmp_path):
     msoi = MsoIssuer(
         data=PID_DATA,
-        private_key=PKEY
+        validity=validity,
+        private_key=cose_private_key(pki.ds_key),
+        cert_path=pki.write_ds(tmp_path / "ds.der"),
     )
 
-    # TODO: assertion here about msow.hash_map and msow.disclosure_map
+    assert set(msoi.hash_map["eu.europa.ec.eudiw.pid.1"]) == set(range(len(PID_DATA["eu.europa.ec.eudiw.pid.1"])))
 
-    mso = msoi.sign()
+    mso = msoi.sign(device_key=cbor2.loads(cbor2.dumps({1: 2})), doctype="eu.europa.ec.eudiw.pid.1")
 
     Sign1Message.decode(mso.encode())
 
-    # TODO: assertion about the content
-    #  breakpoint()
 
-
-def test_mdoc_issuer():
+def test_mdoc_issuer(pki, validity, tmp_path):
     mdoci = MdocCborIssuer(
-        private_key=PKEY
+        private_key=cose_private_key(pki.ds_key)
     )
 
     mdoc = mdoci.new(
         doctype="eu.europa.ec.eudiw.pid.1",
         data=PID_DATA,
-        devicekeyinfo=PKEY  # TODO
+        validity=validity,
+        devicekeyinfo=pem_device_key(pki.device_key.public_key()),
+        cert_path=pki.write_ds(tmp_path / "ds.der"),
     )
 
     mdocp = MdocCbor()
-    aa = cbor2.dumps(mdoc)
+    aa = cbor2.dumps({"version": "1.0", "documents": [{"docType": "eu.europa.ec.eudiw.pid.1", "issuerSigned": mdoc}]})
     mdocp.loads(aa)
-    mdocp.verify()
-    
+    assert mdocp.verify(trusted_certificates=[pki.iaca])
+
     mdoci.dump()
     mdoci.dumps()
-    

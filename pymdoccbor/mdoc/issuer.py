@@ -13,20 +13,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import base64
 import binascii
-import cbor2
 import logging
-from cryptography.hazmat.primitives import serialization
-from pycose.keys import CoseKey
 from typing import Union
 
+import cbor2
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from pycose.keys import CoseKey
+
+from pymdoccbor import settings
+from pymdoccbor.exceptions import MsoPrivateKeyRequired
 from pymdoccbor.mso.issuer import MsoIssuer
 
-from cbor_diag import *
-
-
 logger = logging.getLogger("pymdoccbor")
+
+#: COSE_Key parameters that only a private key has (EC2 d, OKP d, symmetric k)
+PRIVATE_COSE_KEY_LABELS = {-4}
+
+
+def device_key_to_cose(devicekeyinfo: Union[dict, CoseKey, str]) -> dict:
+    """The holder's public key as a COSE_Key map for the MSO deviceKeyInfo.
+
+    Accepts a base64url-encoded PEM public key (EC), a COSE_Key map (integer
+    or pycose string labels) or a pycose CoseKey. Private keys are rejected.
+    """
+    if isinstance(devicekeyinfo, str):
+        try:
+            public_key = serialization.load_pem_public_key(base64.urlsafe_b64decode(devicekeyinfo.encode("utf-8")))
+        except Exception as e:
+            raise ValueError(f"Unreadable device key: {e}")
+        if not isinstance(public_key, ec.EllipticCurvePublicKey):
+            raise ValueError("Unsupported device key: only EC keys are supported")
+        curve_name = public_key.curve.name
+        curve_id = settings.COSE_CURVE_IDS.get(curve_name)
+        if curve_id is None:
+            raise ValueError(f"Unsupported device key curve: {curve_name}")
+        size = (public_key.curve.key_size + 7) // 8
+        numbers = public_key.public_numbers()
+        return {1: 2, -1: curve_id, -2: numbers.x.to_bytes(size, "big"), -3: numbers.y.to_bytes(size, "big")}
+
+    if isinstance(devicekeyinfo, dict) and not all(isinstance(k, int) for k in devicekeyinfo):
+        devicekeyinfo = CoseKey.from_dict(devicekeyinfo)
+    if isinstance(devicekeyinfo, CoseKey):
+        devicekeyinfo = cbor2.loads(devicekeyinfo.encode())
+    if not isinstance(devicekeyinfo, dict) or 1 not in devicekeyinfo:
+        raise ValueError("Unsupported device key format")
+    if PRIVATE_COSE_KEY_LABELS & set(devicekeyinfo):
+        raise ValueError("The device key must be a public key: it contains private parameters")
+    return dict(devicekeyinfo)
 
 
 class MdocCborIssuer:
@@ -38,12 +75,18 @@ class MdocCborIssuer:
         slot_id: int = None,
         alg: str = None,
         kid: str = None,
-        private_key: Union[dict, CoseKey] = {},
+        private_key: Union[dict, CoseKey] = None,
     ):
+        if any(v is not None for v in (key_label, user_pin, lib_path, slot_id)):
+            raise NotImplementedError("HSM signing (key_label, user_pin, lib_path, slot_id) is not supported")
         self.version: str = "1.0"
         self.status: int = 0
-        if private_key and isinstance(private_key, dict):
+        if isinstance(private_key, dict) and private_key:
             self.private_key = CoseKey.from_dict(private_key)
+        elif isinstance(private_key, CoseKey):
+            self.private_key = private_key
+        else:
+            raise MsoPrivateKeyRequired("MdocCborIssuer requires a private key")
 
         self.signed: dict = {}
         self.key_label = key_label
@@ -61,95 +104,37 @@ class MdocCborIssuer:
         devicekeyinfo: Union[dict, CoseKey, str] = None,
         cert_path: str = None,
         revocation: dict = None,
+        cert: bytes = None,
     ):
         """
         create a new mdoc with signed mso
+
+        :param cert_path: path of the issuer (DS) certificate, DER or PEM
+        :param cert: the issuer (DS) certificate, DER or PEM (instead of cert_path)
         """
-        if isinstance(devicekeyinfo, dict):
-            devicekeyinfo = CoseKey.from_dict(devicekeyinfo)
-        if isinstance(devicekeyinfo, str):
-            device_key_bytes = base64.urlsafe_b64decode(devicekeyinfo.encode("utf-8"))
-            public_key = serialization.load_pem_public_key(device_key_bytes)
-            curve_name = public_key.curve.name
-            curve_map = {
-                "secp256r1": 1,  # NIST P-256
-                "secp384r1": 2,  # NIST P-384
-                "secp521r1": 3,  # NIST P-521
-                "brainpoolP256r1": 8,  # Brainpool P-256
-                "brainpoolP384r1": 9,  # Brainpool P-384
-                "brainpoolP512r1": 10,  # Brainpool P-512
-                # Add more curve mappings as needed
-            }
-
-            # Define the expected byte lengths for each curve
-            curve_byte_lengths = {
-                "secp256r1": 32,  # 256 bits / 8 = 32 bytes
-                "secp384r1": 48,  # 384 bits / 8 = 48 bytes
-                "secp521r1": 66,  # 521 bits / 8 = 65.125, rounded up to 66 bytes
-                "brainpoolP256r1": 32,  # 256 bits / 8 = 32 bytes
-                "brainpoolP384r1": 48,  # 384 bits / 8 = 48 bytes
-                "brainpoolP512r1": 64,  # 512 bits / 8 = 64 bytes
-            }
-
-            curve_identifier = curve_map.get(curve_name)
-
-            expected_byte_length = curve_byte_lengths.get(curve_name)
-
-            if expected_byte_length is None:
-                raise ValueError(f"Unsupported curve: {curve_name}")
-
-            x = public_key.public_numbers().x.to_bytes(expected_byte_length, "big")
-            y = public_key.public_numbers().y.to_bytes(expected_byte_length, "big")
-
-            devicekeyinfo = {
-                1: 2,
-                -1: curve_identifier,
-                -2: x,
-                -3: y,
-            }
-
-        else:
-            devicekeyinfo: CoseKey = devicekeyinfo
-
         msoi = MsoIssuer(
             data=data,
             private_key=self.private_key,
             alg=self.alg,
             cert_path=cert_path,
+            cert=cert,
             validity=validity,
             revocation=revocation,
         )
 
-        mso = msoi.sign(doctype=doctype, device_key=devicekeyinfo)
+        mso = msoi.sign(doctype=doctype, device_key=device_key_to_cose(devicekeyinfo))
 
-        mso_cbor = mso.encode(
-            tag=False,
-            key_label=self.key_label,
-            user_pin=self.user_pin,
-            lib_path=self.lib_path,
-            slot_id=self.slot_id,
-        )
+        mso_cbor = mso.encode(tag=False)
 
         # TODO: for now just a single document, it would be trivial having
         # also multiple but for now I don't have use cases for this
         res = {
-            # "version": self.version,
-            # "documents": [
-            # {
-            # "docType": doctype,  # 'org.iso.18013.5.1.mDL'
-            # "issuerSigned": {
             "nameSpaces": {
                 ns: [v for k, v in dgst.items()]
                 for ns, dgst in msoi.disclosure_map.items()
             },
-            "issuerAuth": cbor2.decoder.loads(mso_cbor),
-            # },
-            # }
-            # ],
-            # "status": self.status,
+            "issuerAuth": cbor2.loads(mso_cbor),
         }
-
-        # print("mso diganostic notation: \n", cbor2diag(mso_cbor))
 
         self.signed = res
         return self.signed

@@ -40,10 +40,10 @@ setup(
     classifiers=[
         "Development Status :: 4 - Beta",
         "License :: OSI Approved :: Apache Software License",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     url="https://github.com/peppelinux/pyMDL-MDOC",
@@ -59,5 +59,5 @@ setup(
             for i in glob(f"{_pkg_name}/**", recursive=True)
         ]
     },
-    install_requires=["cbor2>=5.4.0,<5.5.0", "cwt>=2.3.0,<2.4", "pycose>=1.0.1,<1.1.0"],
+    install_requires=["cbor2>=5.4.0,<6", "pycose>=1.0.1,<2", "cryptography>=41"],
 )
