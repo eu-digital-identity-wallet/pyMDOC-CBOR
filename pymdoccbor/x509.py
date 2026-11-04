@@ -1,22 +1,33 @@
 import datetime
-import os
-
-from cwt import COSEKey
 
 from cryptography import x509
-from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 from . import settings
+
+
+def cose_key_to_cryptography(cose_key) -> ec.EllipticCurvePrivateKey:
+    """The cryptography private key of a pycose EC2 private key."""
+    _curve = cose_key.crv.curve_obj
+    if isinstance(_curve, type):
+        _curve = _curve()
+    return ec.derive_private_key(int.from_bytes(cose_key.d, "big"), _curve)
 
 
 class MsoX509Fabric:
 
     def selfsigned_x509cert(self, encoding: str = "DER"):
         """
-            returns an X.509 certificate derived from the private key of the MSO Issuer
+            returns a self-signed X.509 certificate of the MSO issuer's key.
+
+            For tests and demos only: a verifier only trusts certificates that
+            chain to its trust anchors, so a self-signed certificate is never
+            used implicitly when issuing.
         """
-        ckey = COSEKey.from_bytes(self.private_key.encode())
+        private_key = cose_key_to_cryptography(self.private_key)
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         subject = issuer = x509.Name([
             x509.NameAttribute(NameOID.COUNTRY_NAME, settings.X509_COUNTRY_NAME),
@@ -30,13 +41,13 @@ class MsoX509Fabric:
         ).issuer_name(
             issuer
         ).public_key(
-            ckey.key.public_key()
+            private_key.public_key()
         ).serial_number(
             x509.random_serial_number()
         ).not_valid_before(
-            settings.X509_NOT_VALID_BEFORE
+            now
         ).not_valid_after(
-            settings.X509_NOT_VALID_AFTER
+            now + datetime.timedelta(days=settings.X509_NOT_VALID_AFTER_DAYS)
         ).add_extension(
             x509.SubjectAlternativeName(
                 [
@@ -46,8 +57,7 @@ class MsoX509Fabric:
                 ]
             ),
             critical=False,
-            # Sign our certificate with our private key
-        ).sign(ckey.key, hashes.SHA256())
+        ).sign(private_key, hashes.SHA256())
 
         if not encoding:
             return cert

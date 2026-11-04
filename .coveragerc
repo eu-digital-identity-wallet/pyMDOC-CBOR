@@ -1,0 +1,8 @@
+# Coverage settings for pytest-cov (CI: pytest --cov=pymdoccbor pymdoccbor/tests)
+[run]
+branch = true
+omit =
+    pymdoccbor/tests/*
+
+[report]
+show_missing = true

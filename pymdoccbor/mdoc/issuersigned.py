@@ -22,8 +22,9 @@ class IssuerSigned:
     ]
     """
 
-    def __init__(self, nameSpaces: dict, issuerAuth: Union[dict, bytes]):
-        self.namespaces: dict = nameSpaces
+    def __init__(self, issuerAuth: Union[list, bytes], nameSpaces: dict = None):
+        # nameSpaces is optional (ISO/IEC 18013-5 8.3.2.1.2.2): nothing disclosed
+        self.namespaces: dict = nameSpaces or {}
 
         #  if isinstance(ia, dict):
         self.issuer_auth = MsoVerifier(issuerAuth)
