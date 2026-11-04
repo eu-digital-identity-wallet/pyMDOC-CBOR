@@ -1,16 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.0]
+
+_04 Nov 2026_
 
 ### Changed
-- `MsoVerifier.verify_chain()` checks the certificate profiles: every certificate that issues another, trust anchor included, must have BasicConstraints cA=true and KeyUsage keyCertSign and respect its pathLenConstraint; the leaf (DS) certificate must not be a CA, must have KeyUsage digitalSignature when it has KeyUsage, and must have the mdoc DS extended key usage `1.0.18013.5.1.2` when it has an EKU extension. A trust anchor is not accepted as the leaf, and the last chain certificate must be a trust anchor or be directly issued by one (before, any certificate of the chain being or being issued by a trust anchor was enough).
-- The MSO signature `alg` must be in the protected header (and not in the unprotected one), be ES256, ES384 or ES512, and match the issuer key's curve (`MsoVerifier.check_algorithm()`, called by `verify_signature()`). Before, an `alg` only in the unprotected header was used.
-- `tools.shuffle_dict()` (element order, which sets the digest IDs) is a Fisher-Yates shuffle with `secrets.randbelow` instead of `random.SystemRandom().shuffle`: every order equally likely, no `random` module (SonarCloud S2245).
-- Documented in the README and in `verify()` that it authenticates the issuer data only: device authentication (DeviceAuth over the SessionTranscript) is not implemented, so a copied `issuerSigned` verifies.
+- `MsoVerifier.verify_chain()` checks certificate profiles (CA BasicConstraints, KeyUsage, pathLenConstraint, DS EKU `1.0.18013.5.1.2`), and the chain must end at a trust anchor.
+- The MSO `alg` must be in the protected header, be ES256, ES384 or ES512, and match the key's curve (`MsoVerifier.check_algorithm()`).
+- `tools.shuffle_dict()` uses a Fisher-Yates shuffle with `secrets.randbelow` (SonarCloud S2245).
+- README and `verify()` document that device authentication is not implemented.
 
 ### Fixed
-- `MsoIssuer.sign(valid_from=...)` was accepted and then overwritten by the issuance date. It now sets `validFrom` (default: the issuance date, as before; `signed` stays the issuance date) and must not be before the issuance date (ISO 18013-5 9.1.2.4). The default doctype uses `next(iter(...))` instead of `list(...)[0]` (SonarCloud).
-- `MobileDocument.verify()` raised on an MSO that is not a map or whose `validityInfo` is not a map; it now returns `False` with the error recorded.
+- `MsoIssuer.sign(valid_from=...)` was ignored; it sets `validFrom`, which must not be before the issuance date (ISO 18013-5 9.1.2.4).
+- `MobileDocument.verify()` raised on a malformed MSO or `validityInfo` instead of returning `False`.
 
 ## [0.6.0]
 
